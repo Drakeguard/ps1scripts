@@ -67,6 +67,45 @@ function Resolve-GlobalPath {
     return $null
 }
 
+function Sync-ConfigApplications {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$ResolvedConfig
+    )
+    $prop = $ResolvedConfig.PSObject.Properties['applications']
+    if (-not $prop) { $prop = $ResolvedConfig.PSObject.Properties['Applications'] }
+    if (-not $prop) { return }
+    $arr = @($prop.Value)
+    $script:Config.Applications = $arr
+    $Config.Applications = $arr
+}
+
+function Sync-ConfigIde {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$ResolvedConfig
+    )
+    if ($null -eq $ResolvedConfig.PSObject.Properties['ide']) { return }
+    $ide = $ResolvedConfig.ide
+    $cmd = "code"
+    $args = @()
+    if ($ide -is [string]) {
+        $t = $ide.Trim()
+        if ($t) { $cmd = $t }
+    }
+    elseif ($ide -and $ide.PSObject.Properties) {
+        if ($ide.command) { $cmd = [string]$ide.command }
+        elseif ($ide.executable) { $cmd = [string]$ide.executable }
+        if ($ide.arguments) { $args = @($ide.arguments) }
+    }
+    $script:Config.IdeCommand = $cmd
+    $script:Config.IdeArguments = $args
+    $Config.IdeCommand = $cmd
+    $Config.IdeArguments = $args
+}
+
 function Initialize-GlobalConfig {
     [CmdletBinding()]
     param()
@@ -90,6 +129,8 @@ function Initialize-GlobalConfig {
             if ($null -ne $c.PSObject.Properties['RepoConfigFile'])   { $script:RepoConfigFile = $c.RepoConfigFile }
             if ($null -ne $c.PSObject.Properties['TopDirs'])           { $script:Config.TopDirs = @($c.TopDirs) }
             if ($null -ne $c.PSObject.Properties['Services'])         { $script:Config.Services = @($c.Services) }
+            Sync-ConfigApplications -ResolvedConfig $c
+            Sync-ConfigIde -ResolvedConfig $c
         }
         if ($json.defaults) {
             $script:GlobalDefaults = @(Resolve-DefinitionsInValue -Value $json.defaults -Definitions $definitions)

@@ -13,6 +13,9 @@ $CacheFile      = Join-Path $env:USERPROFILE ".ws-launcher\cache.json"
 
 # Suchpfade und optionale feste Services
 $Config = [ordered]@{
-    TopDirs  = @("C:\git\ct")
-    Services = @()
+    TopDirs        = @("C:\git\ct")
+    Services       = @()
+    Applications   = @()
+    IdeCommand     = "code"
+    IdeArguments   = @()
 }

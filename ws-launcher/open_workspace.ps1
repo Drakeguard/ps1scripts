@@ -13,7 +13,9 @@ param(
     [string]$Reload = "",
 
     [Parameter(Position = 2)]
-    [string]$Profile = ""
+    [string]$Profile = "",
+
+    [switch]$Apps
 )
 
 if ($PSBoundParameters.ContainsKey('Reload') -and [string]::IsNullOrWhiteSpace($Reload)) {
@@ -29,6 +31,7 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptRoot "git.ps1")
 . (Join-Path $ScriptRoot "repos.ps1")
 . (Join-Path $ScriptRoot "executables.ps1")
+. (Join-Path $ScriptRoot "ide.ps1")
 . (Join-Path $ScriptRoot "menu.ps1")
 . (Join-Path $ScriptRoot "launch.ps1")
 
@@ -72,6 +75,11 @@ function Initialize-SearchPath {
 }
 
 Initialize-SearchPath -CliSearchPath $SearchPath
+
+if ($Apps) {
+    Open-GlobalApplications
+    exit 0
+}
 
 # ============================================================
 # Hauptablauf

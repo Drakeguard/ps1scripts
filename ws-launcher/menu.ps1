@@ -35,7 +35,7 @@ function Show-Menu {
             Clear-Host
             Write-Host "=== $Title ===" -ForegroundColor Cyan
             if ($MultiSelect) {
-                $hint = "[UP/DOWN] Move  [SPACE] Toggle  [A] All  [T] Mode  [R] Rescan  [W] Worktrees  [E] Executable  [ENTER] Confirm  [ESC]/[Ctrl+D] Cancel"
+                $hint = "[UP/DOWN] Move  [SPACE] Toggle  [A] All  [T] Mode  [R] Rescan  [W] Worktrees  [V] IDE  [E] Repo exes  [G] Global apps  [ENTER] Confirm  [ESC]/[Ctrl+D] Cancel"
             }
             else {
                 $hint = "[UP/DOWN] Move  [ENTER] Confirm  [ESC]/[Ctrl+D] Cancel"
@@ -137,6 +137,14 @@ function Select-Repos {
         }
         if (($key.Character -eq 'e') -or ($key.Character -eq 'E')) {
             Open-Executable -Repo $item
+            return "Refresh"
+        }
+        if (($key.Character -eq 'g') -or ($key.Character -eq 'G')) {
+            Open-GlobalApplications
+            return "Refresh"
+        }
+        if (($key.Character -eq 'v') -or ($key.Character -eq 'V')) {
+            Open-RepoInIde -Repo $item
             return "Refresh"
         }
         return "Continue"
