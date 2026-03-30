@@ -1,333 +1,242 @@
 # ws-launcher
 
-A PowerShell + Windows Terminal (`wt.exe`) launcher that helps you pick Git repositories (including **bare** repos with **worktrees**) and start one or more repo-defined “services” in new Git Bash tabs.
+PowerShell launcher for **Windows Terminal** (`wt.exe`): pick Git repos (including **bare** repos and **worktrees**), start **services** in new Git Bash tabs, optionally run **per-repo executables**, open **global shortcut apps**, or open the project folder in an **IDE** (default: VS Code `code`).
 
-It supports:
-- Scanning one or more **top directories** for Git projects
-- Selecting a repo, and if it’s **bare**, selecting a **worktree**
-- Loading per-repo services from `.ws-config.json` (base config in bare root + override in worktree)
-- Overriding a service command via `.run-cmd` inside the selected directory
-- Confirming commands before execution
-- Caching scan results to speed up startup
-- Optional “deep” reload to also prefetch worktrees
+**Features**
+
+- Scan one or more **top directories** for repos; optional pinned entries via `Services`
+- **Services** from `global.json` path defaults and/or per-repo `.ws-config.json`; optional `.run-cmd` override
+- **Executables** in `.ws-config.json` (per repo/worktree); **applications** list in `global.json` (any app, with optional CLI args)
+- **IDE**: open repo or selected worktree folder via configurable CLI (e.g. `code`)
+- Launch confirmation in **[RUN]** mode, **cache** for faster restarts, **deep** reload to prefetch worktrees
 
 ## Requirements
 
-- Windows
-- PowerShell 5.1+ or PowerShell 7+
-- [Git for Windows] installed (`git` available on `PATH`)
-- Windows Terminal installed (`wt.exe` available on `PATH`)
-- Git Bash profile present in Windows Terminal (profile name must match what you configure)
-
-## Project layout
-
-```
-ws-launcher/
-├── config.ps1
-├── global-config.ps1    (global.json parsing, $ref, Resolve-GlobalPath)
-├── cache.ps1
-├── git.ps1
-├── repos.ps1
-├── menu.ps1
-├── launch.ps1
-└── open_workspace.ps1   ← entry point
-```
-
-## Logic (how it works)
-
-### Startup flow
-
-1. **config.ps1** – Sets defaults: `$GitBash`, `$GitBashProfile`, `$Config.TopDirs`, `$Config.Services`, paths for cache and global.json.
-2. **global-config.ps1** – If `global.json` exists (`%USERPROFILE%\.ws-launcher\global.json`):
-   - Applies optional **config** overrides (GitBash, TopDirs, etc.).
-   - Builds **path-based default services** (which services apply to which repo paths).
-   - Resolves **definitions** and **$use** / **$ref** (see below).
-3. **SearchPath** – `TopDirs` is set from (in order): CLI arguments → `$env:WS_SEARCHPATH` → config / global.json.
-4. **Repo list** – From cache (if no reload) or by scanning `TopDirs` + `Config.Services`. For each repo, **global path-defaults** are re-applied so `global.json` changes apply without reload.
-5. **Menu** – You pick repos (and for bare repos, a worktree), then for each chosen repo the script may show a **service** menu if multiple services are defined.
-6. **Launch** – For each selected service: resolve final dir and command (including `.run-cmd`), optional confirm, then open a Windows Terminal tab (Git Bash) with that dir and command.
-
-### global.json: definitions vs path-based services
-
-- **definitions** – A top-level object `"definitions": { "name": "value", ... }`. It is a **lookup table only**. Names are referenced in other values with **`$use:name`** (see below). Definitions do **not** define which services belong to which path; they only provide reusable snippets (e.g. command strings).
-- **Path-based services** – Every other top-level key (except `config` and `definitions`) is a **path** (absolute or relative to TopDirs). The value says which **services** apply to repos under that path:
-  - **Object with `services`** – List of `{ "title", "dir", "cmd", "env"? }`. Any string in these entries can use **`$use:name`** to insert `definitions[name]`. Optional **`env`**: environment string (e.g. `SPRING_PROFILES_ACTIVE=it`) prepended to the command so you can reuse one `cmd` and vary only env (see below).
-  - **Object with `$ref`** or **string** like `"$($ref:other-path)"` – This path reuses the **entire service list** of another path. Two steps: (1) take the ref and copy its services, (2) apply **overrides**. Use **`override`** with **field names** (`env`, `cmd`, `title`, `dir`) to override for **all** services: `{ "env": "($use:envIt)" }`. Use **service titles** as keys to override **only that service**: `{ "Backend": { "env": "($use:envIt)" }, "Angular": { "env": "($use:envDev)" } }`. You can combine both (global fields + per-title overrides). Backward compat: top-level **`env`** is treated as `override: { "env": "..." }`.
-
-### global.json: reference syntax
-
-| Syntax | Use case | Example |
-|--------|----------|--------|
-| **`$use:name`** | Insert a definition (snippets) in **services** or config values | `"cmd": "($use:cmdBackend)"` or `"$($use:cmdBackend) -Dprofile=dev"` |
-| **`$ref:path`** | Path **reuses** another path’s service list | `"C:/git/other": "$($ref:ct-angular-ui-bare)"` or `{ "$ref": "ct-angular-ui-bare" }` |
-
-- **`$use`** – Resolved from **definitions** (inline or whole value). Used for commands, titles, etc.
-- **`$ref`** – Resolved from **path keys** (path → path). Only for the path’s value; the referenced path must have a `services` array (or its own ref resolved first).
-
-### Service resolution precedence (per repo)
-
-When the script needs the service list for a chosen repo/worktree:
-
-1. **Inherited** from global.json path-defaults (if the repo path matches a path key).
-2. **Bare repo root** – `<bare-repo>\.ws-config.json` (or inside `.git` if applicable).
-3. **Worktree** – `<selected-worktree>\.ws-config.json` (overrides bare and inherited).
-
-So: **worktree .ws-config** overrides **bare root .ws-config** overrides **global.json path-defaults**. Definitions and `$use` are resolved when building those defaults; they are not a separate “extension” layer.
-
-**Debug:** Run with **`-Verbose`** to print the resolved global.json (definitions and path-defaults after `$use` / `$ref` / override resolution), e.g. `.\open_workspace.ps1 -Verbose`.
-
-### Optional `env` on services (vary only environment)
-
-To avoid repeating the same command when only the environment changes, use **`env`** on the service and keep **`cmd`** in definitions:
-
-- In **definitions**: e.g. `"cmdBackend": "mvn spring-boot:run"`, `"envIt": "SPRING_PROFILES_ACTIVE=it"`.
-- In a **service**: `{ "title": "Backend (IT)", "dir": ".", "cmd": "($use:cmdBackend)", "env": "($use:envIt)" }`.
-
-The launcher runs the shell command as `env_string cmd`, so the effective command is `SPRING_PROFILES_ACTIVE=it mvn spring-boot:run`. You define the command once and only vary `env` per profile/variant.
+- Windows  
+- PowerShell 5.1+ or 7+  
+- [Git for Windows](https://git-scm.com/download/win) (`git` on `PATH`)  
+- Windows Terminal (`wt.exe` on `PATH`)  
+- A Windows Terminal profile for Git Bash whose **name** matches `$GitBashProfile` (see `config.ps1` or `global.json`)
 
 ## Quick start
 
-1. Put the files in a folder (e.g. `C:\tools\ws-launcher\`)
-2. Edit `config.ps1`:
-   - `$GitBash` path (if needed)
-   - `$Config.TopDirs` (folders containing your repos)
+1. Clone or copy this folder (e.g. `C:\tools\ws-launcher\`).
+2. Edit **`config.ps1`**: `$GitBash`, `$Config.TopDirs`, and optionally `$GitBashProfile`.
 3. Run:
 
 ```powershell
 .\open_workspace.ps1
 ```
 
-You will get an interactive menu:
-- **UP/DOWN** to move
-- **SPACE** to toggle selection
-- **ENTER** to confirm
-- **ESC** to cancel
+Optional: copy **`samples/global.json`** to `%USERPROFILE%\.ws-launcher\global.json`, and use **`samples/.ws-config.example.json`** as a template for per-repo `.ws-config.json`.
 
-Repo menu shortcuts:
-- `T` toggles repo mode between **[RUN]** and **[OPEN]**
-- `R` rescans worktrees for the highlighted **bare** repo (updates cache)
-- `W` opens worktree management menu for the highlighted **bare** repo (add/remove worktrees)
-- `E` opens executable launcher for the highlighted repo (launches executables from config)
+## Project layout
 
-## Command-line arguments
+```
+ws-launcher/
+├── open_workspace.ps1   ← entry point
+├── config.ps1
+├── global-config.ps1
+├── cache.ps1
+├── git.ps1
+├── repos.ps1
+├── executables.ps1
+├── ide.ps1
+├── menu.ps1
+├── launch.ps1
+└── samples/             ← global.json + .ws-config.example.json
+```
 
-### TopDirs override
+## How it works
 
-You can override scan locations without editing `config.ps1`:
+1. **`config.ps1`** – Defaults: Git Bash paths, `$Config` (TopDirs, Services, Applications, IDE), `global.json` and cache paths.
+2. **`global-config.ps1`** – If `%USERPROFILE%\.ws-launcher\global.json` exists: merge **config** (TopDirs, Services, **applications**, **ide**, …), resolve **definitions** / **`$use`** / **`$ref`**, build path-based **service** defaults.
+3. **Search path** – TopDirs from: CLI args → `$env:WS_SEARCHPATH` → config / `global.json`.
+4. **Repo list** – Cache (unless reload) or scan TopDirs + `Config.Services`; global path defaults re-attached each run.
+5. **Menu** – Multi-select repos; bare repos may need a worktree when launching.
+6. **Launch** – For each repo: service menu if needed, then Git Bash tabs (or directory-only in **[OPEN]** mode).
+
+**Verbose:** `.\open_workspace.ps1 -Verbose` prints resolved global path defaults.
+
+## `global.json`
+
+**Location:** `%USERPROFILE%\.ws-launcher\global.json`
+
+### `config` block
+
+Overrides the same ideas as `config.ps1`, for example:
+
+| Key | Purpose |
+|-----|--------|
+| `GitBash`, `GitBashProfile` | Bash executable and WT profile name |
+| `TopDirs` | Directories whose **immediate child folders** are scanned for repos |
+| `Services` | Extra fixed repo entries (see below) |
+| `applications` | Global app shortcuts (see **Global applications**) |
+| `ide` | IDE CLI for **V** (see **IDE**) |
+
+Strings can use **`$use:name`** with top-level **`definitions`**.
+
+### Path keys (default services)
+
+Any top-level key other than `config` and `definitions` is treated as a **path** (absolute or relative to TopDirs). Its value describes **services** for repos under that path:
+
+- `{ "services": [ … ] }` – list of `{ "title", "dir", "cmd", "env"? }`
+- `{ "$ref": "other-path-key", "override": { … } }` or `"$($ref:other-path-key)"` – reuse another path’s services and optionally override
+
+**`$use` / `$ref`**
+
+| Syntax | Meaning |
+|--------|--------|
+| `($use:name)` or `$($use:name)` | Insert `definitions[name]` |
+| `$($ref:pathKey)` or `{ "$ref": "pathKey", … }` | Reuse services from another path key |
+
+### Service list resolution (order)
+
+When launching a repo, the **services** list is built in this order; **each step replaces the whole list** if it defines `services`:
+
+1. Inherited from `global.json` path match (`DefaultConfig`)
+2. Bare repo root `.ws-config.json` (and/or under `.git` when applicable)
+3. Selected worktree `.ws-config.json` (wins over bare root)
+
+### Optional `env` on services
+
+`env` is a string prepended to `cmd` in the shell (e.g. `SPRING_PROFILES_ACTIVE=it mvn spring-boot:run`).
+
+---
+
+### Global applications
+
+Under **`config.applications`** (or **`Applications`**), an array of objects:
+
+```json
+"applications": [
+  { "name": "KeePass", "path": "C:\\Program Files\\KeePass\\KeePass.exe" },
+  {
+    "name": "VS Code",
+    "path": "C:\\...\\Code.exe",
+    "arguments": ["--new-window"],
+    "workingDirectory": "C:\\git"
+  }
+]
+```
+
+- **`path`** – absolute or relative (resolved from the process working directory when launching from the menu; prefer absolute for global apps)
+- **`arguments`** – optional string or JSON array (`arguments`, `Arguments`, `args`, `Args` are accepted)
+- **`workingDirectory`** – optional; default is the executable’s directory
+
+In the repo menu, press **`G`** to open this list. From the shell:
 
 ```powershell
+.\open_workspace.ps1 -Apps
+```
+
+### IDE (open folder)
+
+Under **`config.ide`**:
+
+```json
+"ide": { "command": "code", "arguments": ["--new-window"] }
+```
+
+Shorthand: `"ide": "code"`. Use **`command`** or **`executable`**. Extra CLI tokens go in **`arguments`** (before the folder path). Requires the IDE CLI on `PATH` (e.g. VS Code “Install `code` command”).
+
+In the repo menu, press **`V`** to open the **highlighted** repo (or chosen worktree if bare) in the IDE.
+
+## Interactive menu
+
+| Key | Action |
+|-----|--------|
+| ↑ / ↓ | Move |
+| Space | Toggle selection (multi-select) |
+| Enter | Confirm |
+| Esc | Cancel |
+| **A** | Select / clear all |
+| **T** | Toggle **[RUN]** / **[OPEN]** for current row |
+| **R** | Rescan worktrees (bare repo), refresh cache |
+| **W** | Worktree add/remove (bare repo) |
+| **V** | Open current repo/worktree in IDE |
+| **E** | Per-repo **executables** from `.ws-config.json` |
+| **G** | **Global applications** from `global.json` |
+
+## Command line
+
+```powershell
+# Override TopDirs
 .\open_workspace.ps1 "C:\git" "D:\src"
-```
 
-### Reload behavior
-
-The launcher writes a cache file to:
-
-- `%USERPROFILE%\.ws-launcher-cache.json`
-
-Reload modes:
-
-- Default (no reload): **use cache** if present, otherwise scan.
-- Shallow reload: **rescan repos** but do **not** prefetch worktrees.
-- Deep reload: rescan repos and **prefetch worktrees** for bare repos.
-
-Examples:
-
-```powershell
-# use cache (fast)
-.\open_workspace.ps1
-
-# rescan repos, skip worktree prefetch (fast-ish)
+# Reload: "" = fast default; "fast" = rescan; "deep" = rescan + prefetch worktrees
 .\open_workspace.ps1 -Reload
-
-# rescan repos + prefetch all worktrees for bare repos (slow)
 .\open_workspace.ps1 -Reload deep
+
+# Windows Terminal profile name (Git Bash tab)
+.\open_workspace.ps1 -Profile "Git Bash"
+
+# Only global applications menu, then exit
+.\open_workspace.ps1 -Apps
 ```
 
-> Note: even in shallow mode, if you pick a bare repo, worktrees will be fetched on-demand at that moment.
+## Paths on disk
 
-## Per-repo configuration: `.ws-config.json`
+| Item | Path |
+|------|------|
+| Global config | `%USERPROFILE%\.ws-launcher\global.json` |
+| Scan cache | `%USERPROFILE%\.ws-launcher\cache.json` |
+| Per-repo config | `.ws-config.json` (bare root and/or worktree) |
 
-Each repository can define one or more services in `.ws-config.json`.
+## `.ws-config.json` (per repo)
 
-### Where it is read from
-
-- If the repo is **bare**:
-  - base config: `<bare-repo>\.ws-config.json`
-  - override config: `<selected-worktree>\.ws-config.json`
-- If the repo is **non-bare**:
-  - only the worktree config is relevant (it’s just the repo root)
-
-### Schema
+### `services`
 
 ```json
 {
   "services": [
-    {
-      "title": "Spring Boot",
-      "dir": ".",
-      "cmd": "mvn21 spring-boot:run -Dskip.npm"
-    },
-    {
-      "title": "Angular",
-      "dir": "src/angular",
-      "cmd": "npm run local"
-    }
+    { "title": "Backend", "dir": ".", "cmd": "mvn spring-boot:run" },
+    { "title": "Frontend", "dir": "src/web", "cmd": "npm run dev", "env": "NODE_ENV=development" }
   ]
 }
 ```
 
-Notes:
-- `title` is shown in menus and used as the merge key when overriding.
-- `dir` is relative to the selected worktree base directory.
-- If `dir` doesn’t exist, the launcher falls back to the **worktree base dir**.
+- **`title`** – Menu label  
+- **`dir`** – Relative to the selected worktree root; if missing on disk, the launcher uses the worktree root  
+- **`cmd`** – Command run in Git Bash  
+- **`env`** – Optional; prepended to `cmd`
 
-- Optional **`env`**: string prepended to `cmd` when running (e.g. `SPRING_PROFILES_ACTIVE=it`), so you can reuse the same command with different env.
+### `executables`
 
-### Executable configuration
-
-You can also define a list of executables to launch from your repository:
+Press **E** on a repo. Same shape as global **applications**: **`name`**, **`path`** (relative to repo/worktree or absolute), optional **`arguments`**, **`workingDirectory`**.
 
 ```json
-{
-  "services": [...],
-  "executables": [
-    {
-      "name": "My Application",
-      "path": "bin/myapp.exe"
-    },
-    {
-      "name": "Database Tool",
-      "path": "tools/db-client.exe"
-    }
-  ]
-}
+"executables": [
+  { "name": "App", "path": "bin\\app.exe" },
+  { "name": "Tool", "path": "tools\\x.exe", "arguments": ["--config", "app.json"] }
+]
 ```
 
-Notes:
-- `name` is shown in the executable selection menu
-- `path` is relative to the repository/worktree root (or absolute)
-- Press `E` on any repo in the main menu to open the executable launcher
-- For bare repos, you'll be prompted to select a worktree first
+Bare repo: you pick a worktree first; paths are relative to that worktree.
 
-### Merge rules (bare repos)
+## `.run-cmd` override
 
-If both bare-root and worktree override config exist:
-- Services are merged by `title`
-- Override config only replaces fields that are present and non-empty:
-  - `dir` overrides `dir`
-  - `cmd` overrides `cmd`
+If **`.run-cmd`** exists in the **final service directory** (after resolving `dir`), its first non-empty line replaces that service’s `cmd` (trimmed whitespace).
 
-## Local command override: `.run-cmd`
+## Launch confirmation
 
-If a file named `.run-cmd` exists in the **final directory** being launched (worktree root or service dir), its contents override the configured `cmd`.
+In **[RUN]** mode, before running a non-empty command, the script asks **Y** to run or **N** / Esc to skip. If there is no command, **Y** can still open a tab in that directory.
 
-Example:
+## `config.ps1` reference
 
-`C:\git\myrepo\.run-cmd`
-```
-npm run dev
-```
+- **`$GitBash`** – Path to `bash.exe`  
+- **`$GitBashProfile`** – Windows Terminal profile name passed to `wt.exe -p`  
+- **`$Config.TopDirs`** – List of root folders to scan (each entry can be a string path or `@{ path = "..."; defaultConfig = … }`)  
+- **`$Config.Services`** – Optional pinned repos: `Title`, `Dir`, `Cmd`, `Exec`  
+- **`$Config.Applications`** – Default empty; usually filled from `global.json`  
+- **`$Config.IdeCommand`** / **`$Config.IdeArguments`** – Default `code` / `@()`; override via `global.json` **`ide`**
 
-Rules:
-- Leading/trailing whitespace is trimmed
-- Empty file => ignored
+## Worktrees (bare repos)
 
-## Execution confirmation
-
-If the repo is in **[RUN]** mode and there is a command to run:
-- The script shows the directory and command
-- You must press `Y` to execute
-
-If in **[RUN]** mode but no command is found:
-- You can press `Y` to open a tab in that directory instead
-- Or `N`/`ESC` to skip
-
-## Config reference (`config.ps1`)
-
-### Git Bash path
-
-Update if your Git is installed elsewhere:
-
-- Default:
-  - `C:\Program Files\Git\bin\bash.exe`
-
-### Windows Terminal profile name
-
-The script uses:
-
-- `wt.exe ... -p "Git Bash"`
-
-If your profile name differs, update `launch.ps1` accordingly.
-
-### TopDirs
-
-`$Config.TopDirs` should contain directories that directly contain repo folders.
-
-Example:
-
-```powershell
-$Config = [ordered]@{
-  TopDirs  = @( "C:\git\ct", "D:\src" )
-  Services = @()
-}
-```
-
-### Explicit Services (optional)
-
-`$Config.Services` can be used to pin specific repos (including ones outside TopDirs).
-Each should have: `Title`, `Dir`, `Cmd`, `Exec`.
-
-Example:
-
-```powershell
-$Config.Services = @(
-  @{ Title="my-repo"; Dir="D:\work\my-repo"; Cmd=""; Exec=$true }
-)
-```
-
-## Worktree Management
-
-The launcher now includes built-in worktree management for bare repositories.
-
-### Adding worktrees
-
-1. Select a bare repo in the main menu
-2. Press `W` to open the worktree management menu
-3. Select "Add New Worktree"
-4. Enter the branch name (new or existing)
-5. Confirm the worktree creation
-
-The launcher will:
-- Create a new worktree in a subdirectory of the bare repo
-- Create a new branch if it doesn't exist
-- Automatically set up the upstream branch for pushing
-
-### Removing worktrees
-
-1. Select a bare repo in the main menu
-2. Press `W` to open the worktree management menu
-3. Select "Remove Existing Worktree"
-4. Select the worktree to remove from the list
-5. Confirm the removal
-
-The worktree directory and its association with the bare repo will be removed.
+**W** opens add/remove flows: new worktree under the bare repo root, or remove an existing linked worktree. After changes, **R** refreshes the cached list.
 
 ## Troubleshooting
 
-### Worktrees not showing
-- Ensure the repo is actually bare and has worktrees:
-  - `git -C <bare-repo> worktree list`
-- Use `R` on the repo in the selection menu to rescan worktrees
-- Or run with deep reload:
-  - `.\open_workspace.ps1 -Reload deep`
-
-### `wt.exe` not found
-- Install Windows Terminal
-- Ensure `wt.exe` is on PATH (usually is after install)
-
-### `git` not found
-- Install Git for Windows and ensure `git.exe` is on PATH
-
-### UTF-8 / weird characters
-The UI uses plain ASCII hints (e.g. `[UP/DOWN]`) to avoid Unicode parsing issues in some PowerShell environments.
+- **Worktrees missing** – `git -C <bare-repo> worktree list`; **R** in the menu; or `-Reload deep`.  
+- **`wt.exe` / `git` not found** – Install and ensure `PATH`.  
+- **Hints use ASCII** – Avoids encoding issues in some consoles.
