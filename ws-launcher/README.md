@@ -106,6 +106,8 @@ You will get an interactive menu:
 Repo menu shortcuts:
 - `T` toggles repo mode between **[RUN]** and **[OPEN]**
 - `R` rescans worktrees for the highlighted **bare** repo (updates cache)
+- `W` opens worktree management menu for the highlighted **bare** repo (add/remove worktrees)
+- `E` opens executable launcher for the highlighted repo (launches executables from config)
 
 ## Command-line arguments
 
@@ -182,6 +184,32 @@ Notes:
 
 - Optional **`env`**: string prepended to `cmd` when running (e.g. `SPRING_PROFILES_ACTIVE=it`), so you can reuse the same command with different env.
 
+### Executable configuration
+
+You can also define a list of executables to launch from your repository:
+
+```json
+{
+  "services": [...],
+  "executables": [
+    {
+      "name": "My Application",
+      "path": "bin/myapp.exe"
+    },
+    {
+      "name": "Database Tool",
+      "path": "tools/db-client.exe"
+    }
+  ]
+}
+```
+
+Notes:
+- `name` is shown in the executable selection menu
+- `path` is relative to the repository/worktree root (or absolute)
+- Press `E` on any repo in the main menu to open the executable launcher
+- For bare repos, you'll be prompted to select a worktree first
+
 ### Merge rules (bare repos)
 
 If both bare-root and worktree override config exist:
@@ -257,6 +285,33 @@ $Config.Services = @(
   @{ Title="my-repo"; Dir="D:\work\my-repo"; Cmd=""; Exec=$true }
 )
 ```
+
+## Worktree Management
+
+The launcher now includes built-in worktree management for bare repositories.
+
+### Adding worktrees
+
+1. Select a bare repo in the main menu
+2. Press `W` to open the worktree management menu
+3. Select "Add New Worktree"
+4. Enter the branch name (new or existing)
+5. Confirm the worktree creation
+
+The launcher will:
+- Create a new worktree in a subdirectory of the bare repo
+- Create a new branch if it doesn't exist
+- Automatically set up the upstream branch for pushing
+
+### Removing worktrees
+
+1. Select a bare repo in the main menu
+2. Press `W` to open the worktree management menu
+3. Select "Remove Existing Worktree"
+4. Select the worktree to remove from the list
+5. Confirm the removal
+
+The worktree directory and its association with the bare repo will be removed.
 
 ## Troubleshooting
 

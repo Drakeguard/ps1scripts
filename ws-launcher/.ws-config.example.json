@@ -1,0 +1,29 @@
+{
+  "services": [
+    {
+      "title": "Backend Server",
+      "dir": "backend",
+      "cmd": "npm start",
+      "env": "NODE_ENV=development"
+    },
+    {
+      "title": "Frontend Dev Server",
+      "dir": "frontend",
+      "cmd": "npm run dev"
+    }
+  ],
+  "executables": [
+    {
+      "name": "Desktop Application",
+      "path": "bin/app.exe"
+    },
+    {
+      "name": "Database Admin Tool",
+      "path": "tools/db-admin.exe"
+    },
+    {
+      "name": "Log Viewer",
+      "path": "C:\\Tools\\LogViewer.exe"
+    }
+  ]
+}

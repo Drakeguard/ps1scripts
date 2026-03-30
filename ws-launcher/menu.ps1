@@ -35,7 +35,7 @@ function Show-Menu {
             Clear-Host
             Write-Host "=== $Title ===" -ForegroundColor Cyan
             if ($MultiSelect) {
-                $hint = "[UP/DOWN] Move  [SPACE] Toggle  [A] All  [T] Mode  [R] Rescan  [ENTER] Confirm  [ESC]/[Ctrl+D] Cancel"
+                $hint = "[UP/DOWN] Move  [SPACE] Toggle  [A] All  [T] Mode  [R] Rescan  [W] Worktrees  [E] Executable  [ENTER] Confirm  [ESC]/[Ctrl+D] Cancel"
             }
             else {
                 $hint = "[UP/DOWN] Move  [ENTER] Confirm  [ESC]/[Ctrl+D] Cancel"
@@ -125,6 +125,18 @@ function Select-Repos {
             $bareTag = if ($item.IsBare) { " (Bare)" } else { "" }
             $item.MenuLabel = "$modeTag$bareTag  $($item.Title)  ($($item.Dir))"
             Write-Cache -Repos $Services
+            return "Refresh"
+        }
+        if (($key.Character -eq 'w') -or ($key.Character -eq 'W')) {
+            if ($item.IsBare) {
+                Show-WorktreeMenu -Repo $item
+                $item.Worktrees = Get-WorktreesForBare -BareDir $item.BareGitDir
+                Write-Cache -Repos $Services
+                return "Refresh"
+            }
+        }
+        if (($key.Character -eq 'e') -or ($key.Character -eq 'E')) {
+            Open-Executable -Repo $item
             return "Refresh"
         }
         return "Continue"
@@ -221,5 +233,65 @@ function Confirm-Launch {
         if (($k.Character -eq 'y') -or ($k.Character -eq 'Y')) { return $true }
         if (($k.Character -eq 'n') -or ($k.Character -eq 'N')) { return $false }
         if ($k.VirtualKeyCode -eq 27) { return $false }
+    }
+}
+
+function Show-WorktreeMenu {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [PSCustomObject]$Repo
+    )
+
+    $menuItems = @(
+        [PSCustomObject]@{ Action = "Add"; Label = "Add New Worktree" }
+        [PSCustomObject]@{ Action = "Remove"; Label = "Remove Existing Worktree" }
+    )
+
+    $selected = Show-Menu `
+        -Title "Worktree Management -- $($Repo.Title)" `
+        -Items $menuItems `
+        -LabelScript { param($item) $item.Label } `
+        -MultiSelect $false
+
+    if (-not $selected) {
+        return
+    }
+
+    if ($selected.Action -eq "Add") {
+        $result = Add-GitWorktree -BareDir $Repo.BareGitDir -BareRootDir $Repo.Dir
+        if ($result) {
+            Clear-Host
+            Write-Host "`nWorktree created successfully at: $result" -ForegroundColor Green
+            Start-Sleep -Milliseconds 1000
+        }
+    }
+    elseif ($selected.Action -eq "Remove") {
+        if (-not $Repo.Worktrees -or $Repo.Worktrees.Count -eq 0) {
+            $Repo.Worktrees = Get-WorktreesForBare -BareDir $Repo.BareGitDir
+        }
+
+        if (-not $Repo.Worktrees -or $Repo.Worktrees.Count -eq 0) {
+            Clear-Host
+            Write-Host "`n=== No Worktrees Found ===" -ForegroundColor Yellow
+            Write-Host "No worktrees to remove." -ForegroundColor DarkCyan
+            Write-Host "Press any key to continue..." -ForegroundColor DarkCyan
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            return
+        }
+
+        $worktreeToRemove = Show-Menu `
+            -Title "Select Worktree to Remove -- $($Repo.Title)" `
+            -Items $Repo.Worktrees `
+            -LabelScript { param($wt) "[$($wt.Branch)]  $($wt.Path)" } `
+            -MultiSelect $false
+
+        if ($worktreeToRemove) {
+            $removed = Remove-GitWorktree -BareDir $Repo.BareGitDir -WorktreePath $worktreeToRemove.Path
+            if ($removed) {
+                # Refresh worktree list after removal
+                $Repo.Worktrees = Get-WorktreesForBare -BareDir $Repo.BareGitDir
+            }
+        }
     }
 }

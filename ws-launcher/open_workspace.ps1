@@ -28,6 +28,7 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptRoot "cache.ps1")
 . (Join-Path $ScriptRoot "git.ps1")
 . (Join-Path $ScriptRoot "repos.ps1")
+. (Join-Path $ScriptRoot "executables.ps1")
 . (Join-Path $ScriptRoot "menu.ps1")
 . (Join-Path $ScriptRoot "launch.ps1")
 
