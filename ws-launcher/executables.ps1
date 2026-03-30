@@ -14,11 +14,16 @@ function Get-ConfiguredExeMenuLabel {
 
 function Get-ProcessArgumentList {
     param([Parameter(Mandatory = $true)] $Entry)
-    if (-not ($Entry.PSObject.Properties['arguments'] -and $null -ne $Entry.arguments)) {
-        return $null
+    $raw = $null
+    foreach ($propName in @('arguments', 'Arguments', 'args', 'Args')) {
+        if ($Entry.PSObject.Properties[$propName] -and $null -ne $Entry.$propName) {
+            $raw = $Entry.$propName
+            break
+        }
     }
-    if ($Entry.arguments -is [string]) { return $Entry.arguments }
-    return @($Entry.arguments)
+    if ($null -eq $raw) { return $null }
+    if ($raw -is [string]) { return $raw }
+    return @($raw)
 }
 
 function Resolve-WorkingDirectoryForExe {
@@ -49,6 +54,10 @@ function Invoke-LauncherStartProcess {
     Write-Host "=== Launching ===" -ForegroundColor Cyan
     Write-Host "  Name: $DisplayName" -ForegroundColor Green
     Write-Host "  Path: $FilePath" -ForegroundColor Yellow
+    if ($ArgumentList) {
+        $argPreview = if ($ArgumentList -is [string]) { $ArgumentList } else { ($ArgumentList | ForEach-Object { $_ }) -join ' ' }
+        Write-Host "  Args: $argPreview" -ForegroundColor DarkGray
+    }
     Write-Host "`nLaunching..." -ForegroundColor DarkCyan
 
     $sp = @{
@@ -169,7 +178,7 @@ function Open-GlobalApplications {
         Write-Host '      { "name": "VS Code", "path": "C:\\...\\Code.exe" }' -ForegroundColor Gray
         Write-Host '    ]' -ForegroundColor Gray
         Write-Host '  }' -ForegroundColor Gray
-        Write-Host "`nOptional per entry: `"arguments`", `"workingDirectory`"." -ForegroundColor DarkCyan
+        Write-Host "`nPer entry (optional): `"arguments`" (string or JSON array), `"workingDirectory`"." -ForegroundColor DarkCyan
         Read-LauncherPause
         return
     }

@@ -1,0 +1,57 @@
+{
+    "config": {
+        "GitBash": "C:\\Program Files\\Git\\bin\\bash.exe",
+        "GitBashProfile": "Git Bash",
+        "TopDirs": ["C:\\git\\ct"],
+        "Services": [],
+        "applications": [
+            { "name": "KeePass", "path": "C:\\Program Files\\KeePass\\KeePass.exe" },
+            {
+                "name": "VS Code",
+                "path": "C:\\Users\\you\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+                "arguments": ["--new-window"]
+            },
+            {
+                "name": "KeePass (DB)",
+                "path": "C:\\Program Files\\KeePass\\KeePass.exe",
+                "arguments": ["C:\\secure\\vault.kdbx"],
+                "workingDirectory": "C:\\secure"
+            }
+        ],
+        "ide": {
+            "command": "code",
+            "arguments": []
+        }
+    },
+    "definitions": {
+        "cmdBackend": "mvn spring-boot:run",
+        "cmdFrontend": "npm run dev",
+        "cmdAngular": "npm run start",
+        "envIt": "SPRING_PROFILES_ACTIVE=it",
+        "envDev": "SPRING_PROFILES_ACTIVE=dev"
+    },
+    "C:/git/ct": {
+        "services": [
+            { "title": "Backend", "dir": ".", "cmd": "($use:cmdBackend)" },
+            { "title": "Backend (IT)", "dir": ".", "cmd": "($use:cmdBackend)", "env": "($use:envIt)" },
+            { "title": "Backend (dev)", "dir": ".", "cmd": "$($use:cmdBackend) -Dspring.profiles.active=dev" },
+            { "title": "Frontend", "dir": "src/web", "cmd": "($use:cmdFrontend)" }
+        ]
+    },
+    "ct-angular-ui-bare": {
+        "services": [
+            { "title": "Backend", "dir": ".", "cmd": "($use:cmdBackend)" },
+            { "title": "Angular", "dir": ".", "cmd": "($use:cmdAngular)" }
+        ]
+    },
+    "C:/git/other": "$($ref:ct-angular-ui-bare)",
+    "repo-it": { "$ref": "ct-angular-ui-bare", "override": { "env": "($use:envIt)" } },
+    "repo-dev": { "$ref": "ct-angular-ui-bare", "override": { "env": "($use:envDev)" } },
+    "repo-mixed": {
+        "$ref": "ct-angular-ui-bare",
+        "override": {
+            "Backend": { "env": "($use:envIt)" },
+            "Angular": { "env": "($use:envDev)" }
+        }
+    }
+}

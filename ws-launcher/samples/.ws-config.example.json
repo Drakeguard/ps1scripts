@@ -24,6 +24,12 @@
     {
       "name": "Log Viewer",
       "path": "C:\\Tools\\LogViewer.exe"
+    },
+    {
+      "name": "Tool with CLI args",
+      "path": "tools\\helper.exe",
+      "arguments": ["--verbose", "config.json"],
+      "workingDirectory": "."
     }
   ]
 }
