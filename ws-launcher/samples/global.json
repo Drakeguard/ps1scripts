@@ -27,7 +27,7 @@
         "cmdBackend": "mvn spring-boot:run",
         "cmdFrontend": "npm run dev",
         "cmdAngular": "npm run start",
-        "envIt": "SPRING_PROFILES_ACTIVE=it",
+        "envInt": "SPRING_PROFILES_ACTIVE=int",
         "envDev": "SPRING_PROFILES_ACTIVE=dev"
     },
     "C:/git/ct": {
@@ -38,17 +38,17 @@
             { "title": "Frontend", "dir": "src/web", "cmd": "($use:cmdFrontend)" }
         ]
     },
-    "ct-angular-ui-bare": {
+    "angular-ui-bare": {
         "services": [
             { "title": "Backend", "dir": ".", "cmd": "($use:cmdBackend)" },
             { "title": "Angular", "dir": ".", "cmd": "($use:cmdAngular)" }
         ]
     },
-    "C:/git/other": "$($ref:ct-angular-ui-bare)",
-    "repo-it": { "$ref": "ct-angular-ui-bare", "override": { "env": "($use:envIt)" } },
-    "repo-dev": { "$ref": "ct-angular-ui-bare", "override": { "env": "($use:envDev)" } },
+    "C:/git/other": "$($ref:angular-ui-bare)",
+    "repo-it": { "$ref": "angular-ui-bare", "override": { "env": "($use:envIt)" } },
+    "repo-dev": { "$ref": "angular-ui-bare", "override": { "env": "($use:envDev)" } },
     "repo-mixed": {
-        "$ref": "ct-angular-ui-bare",
+        "$ref": "angular-ui-bare",
         "override": {
             "Backend": { "env": "($use:envIt)" },
             "Angular": { "env": "($use:envDev)" }

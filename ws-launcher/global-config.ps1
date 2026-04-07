@@ -229,6 +229,7 @@ function Initialize-GlobalConfig {
                     Write-Verbose "    - $($s.title): $envPart, $cmdPart"
                 }
             }
+            $null = Read-Host "Press Enter to continue..."
         }
     }
     catch {
